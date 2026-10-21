@@ -1,7 +1,9 @@
 // Define tables here, then run `npm run db:push`.
 // https://orm.drizzle.team/docs/sql-schema-declaration
 import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core"
+import { createInsertSchema } from "drizzle-zod"
 import { nanoid } from "nanoid"
+import { z } from "zod"
 
 export const bots = pgTable(
   "bots",
@@ -31,3 +33,13 @@ export const bots = pgTable(
 
 export type Bot = typeof bots.$inferSelect
 export type NewBot = typeof bots.$inferInsert
+
+// Fields a user fills in when creating a bot. The server sets userId.
+export const insertBotSchema = createInsertSchema(bots, {
+  name: (s) => s.trim().min(1, "Give your bot a name.").max(50),
+  avatar: z.string().min(1),
+  job: (s) => s.trim().min(1, "Say what your bot is for.").max(80),
+  instructions: z.string().trim().max(2000),
+}).pick({ name: true, avatar: true, job: true, instructions: true })
+
+export type InsertBot = z.infer<typeof insertBotSchema>
