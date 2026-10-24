@@ -1,7 +1,9 @@
 import { UserButton } from "@clerk/nextjs"
 import { formatDistanceToNowStrict } from "date-fns"
+import Link from "next/link"
 
 import { ChatAvatar } from "@/components/chat-avatar"
+import { ChatSearch } from "@/components/chat-search"
 import { NewChatMenu } from "@/components/new-chat-menu"
 import {
   Sidebar,
@@ -20,8 +22,19 @@ export async function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="flex-row justify-end">
-        <NewChatMenu />
+      <SidebarHeader>
+        <div className="flex justify-end">
+          <NewChatMenu />
+        </div>
+        <ChatSearch
+          chats={chats.flatMap((chat) => {
+            const bot = chat.members[0]?.bot
+            if (!bot) return []
+            return [
+              { id: chat.id, name: chat.name ?? bot.name, avatar: bot.avatar },
+            ]
+          })}
+        />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -32,7 +45,10 @@ export async function AppSidebar() {
               if (!bot) return null
               return (
                 <SidebarMenuItem key={chat.id}>
-                  <SidebarMenuButton size="lg">
+                  <SidebarMenuButton
+                    size="lg"
+                    render={<Link href={`/chats/${chat.id}`} />}
+                  >
                     <ChatAvatar seed={bot.avatar} />
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <div className="flex items-baseline gap-2">
