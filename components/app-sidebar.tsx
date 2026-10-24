@@ -14,6 +14,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
 import { getChats } from "@/queries/bots"
 
@@ -21,7 +22,7 @@ export async function AppSidebar() {
   const chats = await getChats()
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex justify-end">
           <NewChatMenu />
@@ -45,8 +46,11 @@ export async function AppSidebar() {
               if (!bot) return null
               return (
                 <SidebarMenuItem key={chat.id}>
+                  {/* Collapsed, the button keeps its expanded height and padding, so the avatar stays full size. */}
                   <SidebarMenuButton
                     size="lg"
+                    tooltip={chat.name ?? bot.name}
+                    className="group-data-[collapsible=icon]:size-12! group-data-[collapsible=icon]:p-2!"
                     render={<Link href={`/chats/${chat.id}`} />}
                   >
                     <ChatAvatar seed={bot.avatar} />
@@ -74,7 +78,11 @@ export async function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             {/* UserButton renders its own <button>, so the menu button is a div and the trigger fills it. */}
-            <SidebarMenuButton render={<div />} size="lg" className="p-0">
+            <SidebarMenuButton
+              render={<div />}
+              size="lg"
+              className="p-0 group-data-[collapsible=icon]:size-12!"
+            >
               <UserButton
                 showName
                 appearance={{
@@ -86,7 +94,7 @@ export async function AppSidebar() {
                       "w-full min-w-0 flex-row-reverse justify-end gap-4",
                     userButtonAvatarBox: "size-8 rounded-lg",
                     userButtonOuterIdentifier:
-                      "truncate ps-0 text-sm font-medium text-sidebar-foreground",
+                      "truncate ps-0 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:hidden",
                   },
                 }}
               />
@@ -94,6 +102,7 @@ export async function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
