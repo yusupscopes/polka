@@ -2,12 +2,24 @@
 
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ShuffleIcon } from "lucide-react"
+import { ShuffleIcon, Trash2Icon } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useRouter } from "next/navigation"
 import { Controller, useForm, useWatch } from "react-hook-form"
 
-import { createBot } from "@/actions/bot"
+import { createBot, deleteBot, updateBot } from "@/actions/bot"
 import { ChatAvatar } from "@/components/chat-avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,7 +44,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { insertBotSchema, type InsertBot } from "@/lib/db/schema"
+import { insertBotSchema, type Bot, type InsertBot } from "@/lib/db/schema"
 
 const presets = [
   {
@@ -61,11 +73,19 @@ function emptyBot(): InsertBot {
   return { name: "", avatar: nanoid(), job: "", instructions: "" }
 }
 
+function botValues(bot: Bot): InsertBot {
+  const { name, avatar, job, instructions } = bot
+  return { name, avatar, job, instructions: instructions ?? "" }
+}
+
+// Creates a bot, or edits `bot` when one is passed.
 function BotDialog({
+  bot,
   children,
   open: openProp,
   onOpenChange,
 }: {
+  bot?: Bot
   children?: React.ReactElement
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -75,23 +95,36 @@ function BotDialog({
   const setOpen = onOpenChange ?? setOpenState
   const form = useForm<InsertBot>({
     resolver: zodResolver(insertBotSchema),
-    defaultValues: emptyBot(),
+    defaultValues: bot ? botValues(bot) : emptyBot(),
   })
   const avatar = useWatch({ control: form.control, name: "avatar" })
 
+  // Editing always starts from the saved bot, dropping any cancelled changes.
+  function handleOpenChange(next: boolean) {
+    if (next && bot) form.reset(botValues(bot))
+    setOpen(next)
+  }
+
   async function onSubmit(values: InsertBot) {
-    const result = await createBot(values)
+    const result = bot
+      ? await updateBot(bot.id, values)
+      : await createBot(values)
     if ("error" in result) {
       toast.add({ title: result.error, type: "error" })
       return
     }
-    toast.add({ title: `${result.bot.name} is ready.`, type: "success" })
+    toast.add({
+      title: bot
+        ? `${result.bot.name} is updated.`
+        : `${result.bot.name} is ready.`,
+      type: "success",
+    })
     setOpen(false)
-    form.reset(emptyBot())
+    form.reset(bot ? botValues(result.bot) : emptyBot())
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {children && <DialogTrigger render={children} />}
       <DialogContent className="sm:max-w-xl">
         <form
@@ -99,9 +132,11 @@ function BotDialog({
           className="flex flex-col gap-4"
         >
           <DialogHeader>
-            <DialogTitle>New bot</DialogTitle>
+            <DialogTitle>{bot ? "Edit bot" : "New bot"}</DialogTitle>
             <DialogDescription>
-              Give it a face, a name, and a job to do.
+              {bot
+                ? "Change its face, name, or job."
+                : "Give it a face, a name, and a job to do."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2">
@@ -200,6 +235,9 @@ function BotDialog({
             />
           </FieldGroup>
           <DialogFooter>
+            {bot && (
+              <DeleteBotButton bot={bot} onDeleted={() => setOpen(false)} />
+            )}
             <DialogClose render={<Button type="button" variant="outline" />}>
               Cancel
             </DialogClose>
@@ -207,12 +245,73 @@ function BotDialog({
               {form.formState.isSubmitting && (
                 <Spinner data-icon="inline-start" />
               )}
-              Create bot
+              {bot ? "Save changes" : "Create bot"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Asks before deleting, since the bot's direct chat goes with it.
+function DeleteBotButton({
+  bot,
+  onDeleted,
+}: {
+  bot: Bot
+  onDeleted: () => void
+}) {
+  const router = useRouter()
+  const [open, setOpen] = React.useState(false)
+  const [isDeleting, setIsDeleting] = React.useState(false)
+
+  async function handleDelete() {
+    setIsDeleting(true)
+    const result = await deleteBot(bot.id)
+    setIsDeleting(false)
+    if ("error" in result) {
+      toast.add({ title: result.error, type: "error" })
+      return
+    }
+    toast.add({ title: `${result.bot.name} is deleted.`, type: "success" })
+    setOpen(false)
+    onDeleted()
+    // Its chat is gone, so leave the page.
+    router.replace("/")
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="destructive" className="sm:mr-auto" />
+        }
+      >
+        <Trash2Icon data-icon="inline-start" />
+        Delete
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {bot.name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Its chat goes with it. This can&apos;t be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            variant="destructive"
+            disabled={isDeleting}
+            onClick={handleDelete}
+          >
+            {isDeleting && <Spinner data-icon="inline-start" />}
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

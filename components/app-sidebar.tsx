@@ -1,8 +1,8 @@
 import { UserButton } from "@clerk/nextjs"
 import { formatDistanceToNowStrict } from "date-fns"
-import Link from "next/link"
 
 import { ChatAvatar } from "@/components/chat-avatar"
+import { ChatMenuButton } from "@/components/chat-menu-button"
 import { ChatSearch } from "@/components/chat-search"
 import { NewChatMenu } from "@/components/new-chat-menu"
 import {
@@ -46,12 +46,9 @@ export async function AppSidebar() {
               if (!bot) return null
               return (
                 <SidebarMenuItem key={chat.id}>
-                  {/* Collapsed, the button keeps its expanded height and padding, so the avatar stays full size. */}
-                  <SidebarMenuButton
-                    size="lg"
+                  <ChatMenuButton
+                    chatId={chat.id}
                     tooltip={chat.name ?? bot.name}
-                    className="group-data-[collapsible=icon]:size-12! group-data-[collapsible=icon]:p-2!"
-                    render={<Link href={`/chats/${chat.id}`} />}
                   >
                     <ChatAvatar seed={bot.avatar} />
                     <div className="grid flex-1 text-left text-sm leading-tight">
@@ -67,7 +64,7 @@ export async function AppSidebar() {
                         {chat.lastMessagePreview ?? bot.job}
                       </span>
                     </div>
-                  </SidebarMenuButton>
+                  </ChatMenuButton>
                 </SidebarMenuItem>
               )
             })}
