@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 
+import { Chat } from "@/components/chat"
 import { ChatHeader } from "@/components/chat-header"
 import { getChat } from "@/queries/chats"
 
@@ -12,8 +13,9 @@ export default async function Page({ params }: PageProps<"/chats/[chatId]">) {
   if (!chat || !bot) notFound()
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="flex h-svh flex-col">
       <ChatHeader name={chat.name ?? bot.name} bot={bot} />
+      <Chat id={chat.id} />
     </div>
   )
 }
