@@ -19,4 +19,9 @@ export default defineConfig({
     },
   },
   dirs: ["trigger"],
+  build: {
+    // Lets tasks import `server-only` modules such as `lib/db`. No other
+    // dependency ships a react-server export.
+    conditions: ["react-server"],
+  },
 });
