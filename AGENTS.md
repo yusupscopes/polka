@@ -18,6 +18,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - This is a development project. There is no backwards compatibility and the data is worthless. Prefer data loss: never backfill, migrate, or preserve existing rows, and never spend effort on keeping old data working. Every schema change means a clean slate.
 - Apply schema changes only with `npm run db:push` (`drizzle-kit push`). Never generate or run migrations (`drizzle-kit generate`, `drizzle-kit migrate`, or migration files), even if a skill or doc recommends them.
 
+## Deployment
+
+- The app is deployed on Railway (`production` environment). When adding env variables, set them on Railway too, copying values from `.env.local`.
+- Exception: `TRIGGER_SECRET_KEY`. `.env.local` holds the Trigger.dev dev key (`tr_dev_...`); Railway needs the prod key (`tr_prod_...`) from the Trigger.dev dashboard's Production environment. Never copy the local value to Railway.
+
 ## Forms
 
 Reference implementation: `lib/db/schema.ts` (`insertBotSchema`), `actions/bot.ts` (`createBot`), `components/bot-dialog.tsx` (`BotDialog`).
