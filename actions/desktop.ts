@@ -21,9 +21,11 @@ export async function getDesktopUrl(
 ): Promise<GetDesktopUrlResult> {
   await auth.protect()
 
-  // Group chats aren't handled yet, so show the first bot's desktop.
-  const bot = (await getChat(chatId))?.members[0]?.bot
-  if (!bot) return { error: "That chat no longer exists." }
+  const chat = await getChat(chatId)
+  const bot = chat?.members[0]?.bot
+  if (!chat || !bot) return { error: "That chat no longer exists." }
+  // Each bot in a group has its own desktop, so there's no one to show.
+  if (chat.kind === "group") return { error: "Group chats have no desktop." }
 
   try {
     const sandbox = await daytona.get(bot.sandboxId)

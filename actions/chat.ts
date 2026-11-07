@@ -1,12 +1,24 @@
 "use server"
 
+import { auth as clerkAuth } from "@clerk/nextjs/server"
 import { auth } from "@trigger.dev/sdk"
 import {
   chat,
   defaultStorage,
   type ChatStartSessionParams,
 } from "@trigger.dev/sdk/ai"
+import { and, eq, inArray } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
 
+import { db } from "@/lib/db"
+import {
+  bots,
+  chatMembers,
+  chats,
+  insertGroupChatSchema,
+  type Chat,
+  type InsertGroupChat,
+} from "@/lib/db/schema"
 import { getChat } from "@/queries/chats"
 import type { chatAgent } from "@/trigger/chat"
 
@@ -37,4 +49,40 @@ export async function mintChatAccessToken(chatId: string) {
 export async function loadTranscript(params: { chatId: string }) {
   await assertChatOwner(params.chatId)
   return load({ chatId: params.chatId })
+}
+
+type CreateGroupChatResult = { chat: Chat } | { error: string }
+
+export async function createGroupChat(
+  input: InsertGroupChat
+): Promise<CreateGroupChatResult> {
+  const { userId } = await clerkAuth.protect()
+
+  const parsed = insertGroupChatSchema.safeParse(input)
+  if (!parsed.success) return { error: "Check the form and try again." }
+
+  const { name, botIds } = parsed.data
+
+  // The ids come from the browser, so only add bots the user owns.
+  const owned = await db
+    .select({ id: bots.id })
+    .from(bots)
+    .where(and(inArray(bots.id, botIds), eq(bots.userId, userId)))
+  if (owned.length !== new Set(botIds).size) {
+    return { error: "Some of those bots no longer exist." }
+  }
+
+  const chat = await db.transaction(async (tx) => {
+    const [chat] = await tx
+      .insert(chats)
+      .values({ userId, kind: "group", name })
+      .returning()
+    await tx
+      .insert(chatMembers)
+      .values(owned.map((bot) => ({ chatId: chat.id, botId: bot.id })))
+    return chat
+  })
+
+  revalidatePath("/")
+  return { chat }
 }

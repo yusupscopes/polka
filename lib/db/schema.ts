@@ -79,6 +79,16 @@ export const chats = pgTable(
 export type Chat = typeof chats.$inferSelect
 export type NewChat = typeof chats.$inferInsert
 
+// Fields a user fills in when creating a group chat. The server sets userId
+// and kind.
+export const insertGroupChatSchema = createInsertSchema(chats, {
+  name: z.string().trim().min(1, "Give your group a name.").max(50),
+})
+  .pick({ name: true })
+  .extend({ botIds: z.array(z.string()).min(2, "Pick at least two bots.") })
+
+export type InsertGroupChat = z.infer<typeof insertGroupChatSchema>
+
 export const chatMembers = pgTable(
   "chat_members",
   {

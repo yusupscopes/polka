@@ -1,9 +1,9 @@
 import { UserButton } from "@clerk/nextjs"
 import { formatDistanceToNowStrict } from "date-fns"
 
-import { ChatAvatar } from "@/components/chat-avatar"
 import { ChatMenuButton } from "@/components/chat-menu-button"
 import { ChatSearch } from "@/components/chat-search"
+import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { NewChatMenu } from "@/components/new-chat-menu"
 import {
   Sidebar,
@@ -16,23 +16,28 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { getBots } from "@/queries/bots"
 import { getChats } from "@/queries/chats"
 
 export async function AppSidebar() {
-  const chats = await getChats()
+  const [chats, bots] = await Promise.all([getChats(), getBots()])
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex justify-end">
-          <NewChatMenu />
+          <NewChatMenu bots={bots} />
         </div>
         <ChatSearch
           chats={chats.flatMap((chat) => {
             const bot = chat.members[0]?.bot
             if (!bot) return []
             return [
-              { id: chat.id, name: chat.name ?? bot.name, avatar: bot.avatar },
+              {
+                id: chat.id,
+                name: chat.name ?? bot.name,
+                avatars: chat.members.map((member) => member.bot.avatar),
+              },
             ]
           })}
         />
@@ -41,7 +46,7 @@ export async function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             {chats.map((chat) => {
-              // Group chats aren't handled yet, so show the first bot.
+              // A direct chat is named after its only bot.
               const bot = chat.members[0]?.bot
               if (!bot) return null
               return (
@@ -50,7 +55,9 @@ export async function AppSidebar() {
                     chatId={chat.id}
                     tooltip={chat.name ?? bot.name}
                   >
-                    <ChatAvatar seed={bot.avatar} />
+                    <GroupChatAvatar
+                      seeds={chat.members.map((member) => member.bot.avatar)}
+                    />
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <div className="flex items-baseline gap-2">
                         <span className="truncate font-medium">
@@ -61,7 +68,10 @@ export async function AppSidebar() {
                         </span>
                       </div>
                       <span className="truncate text-xs text-muted-foreground">
-                        {chat.lastMessagePreview ?? bot.job}
+                        {chat.lastMessagePreview ??
+                          (chat.kind === "group"
+                            ? chat.members.map((m) => m.bot.name).join(", ")
+                            : bot.job)}
                       </span>
                     </div>
                   </ChatMenuButton>

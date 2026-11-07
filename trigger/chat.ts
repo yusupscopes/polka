@@ -6,9 +6,10 @@ import {
 } from "@trigger.dev/sdk/ai"
 import { isStepCount } from "ai"
 import { asc, eq } from "drizzle-orm"
+import { z } from "zod"
 
 import { db } from "@/lib/db"
-import { chatMembers, type Bot } from "@/lib/db/schema"
+import { chatMembers, chats, type Bot, type Chat } from "@/lib/db/schema"
 import { sandboxLocal, tools } from "@/trigger/tools"
 
 export type ChatUIMessage = InferChatUIMessageFromTools<typeof tools>
@@ -20,19 +21,26 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
   // Declared here too so `toModelOutput` turns past screenshots back into
   // images on later turns.
   tools,
-  // The prompt and sandbox live in the process, so set them on every fresh
-  // worker, not just the chat's first one.
-  onBoot: async ({ chatId }) => {
-    // Group chats aren't handled yet, so answer as the first bot.
-    const member = await db.query.chatMembers.findFirst({
-      where: eq(chatMembers.chatId, chatId),
-      orderBy: asc(chatMembers.joinedAt),
-      with: { bot: true },
+  // The bot the person picked to answer. Direct chats leave it out.
+  clientDataSchema: z.object({ botId: z.string().optional() }),
+  // The prompt and sandbox live in the process and depend on which bot
+  // answers, so set them at the start of every turn.
+  onTurnStart: async ({ chatId, clientData }) => {
+    const row = await db.query.chats.findFirst({
+      where: eq(chats.id, chatId),
+      with: {
+        members: { orderBy: asc(chatMembers.joinedAt), with: { bot: true } },
+      },
     })
-    if (!member) throw new Error(`Chat ${chatId} has no bot.`)
+    const bots = row?.members.map((member) => member.bot) ?? []
+    // The id comes from the browser, so it must be one of this chat's bots.
+    const bot = clientData?.botId
+      ? bots.find((bot) => bot.id === clientData.botId)
+      : bots[0]
+    if (!row || !bot) throw new Error(`Chat ${chatId} has no such bot.`)
 
-    sandboxLocal.init({ id: member.bot.sandboxId })
-    chat.prompt.set(systemPrompt(member.bot))
+    sandboxLocal.init({ id: bot.sandboxId })
+    chat.prompt.set(systemPrompt(bot, row, bots))
   },
   run: async ({ messages, tools, signal, streamText }) =>
     streamText({
@@ -45,8 +53,8 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
     }),
 })
 
-function systemPrompt(bot: Bot) {
-  const prompt = `You are ${bot.name}, an AI bot in Polka. Your job: ${bot.job}.
+function systemPrompt(bot: Bot, chat: Chat, members: Bot[]) {
+  let prompt = `You are ${bot.name}, an AI bot in Polka. Your job: ${bot.job}.
 
 Polka is an app where people create bots, each with its own job, and chat with them. The person messaging you created you to do this job. Stay focused on it, and when a request falls outside it, say so plainly and suggest what you can help with instead.
 
@@ -55,6 +63,17 @@ You have your own sandbox: a private, isolated Linux computer in the cloud that 
 Use your tools to do the work rather than describing how the person could do it. Prefer bash and the file tools when a task doesn't need the screen; they're faster and more reliable. When you do use the desktop, look at the screen with viewScreen before acting and after anything that changes it, and read coordinates from the latest screenshot. The person only sees a screenshot when you call showScreen, so use it when they ask what's on the screen.
 
 Keep replies short and conversational, like a chat message. Use Markdown only when it helps, such as for code or lists. If you don't know something, say so rather than guessing.`
+
+  // Without this, a bot reads the other bots' replies as its own.
+  if (chat.kind === "group") {
+    const others = members
+      .filter((member) => member.id !== bot.id)
+      .map((member) => member.name)
+      .join(", ")
+    prompt += `
+
+This is a group chat called "${chat.name}" with other bots: ${others}. The person picks which bot answers each message, and they picked you for this one. Earlier replies in the conversation may be from the other bots, not you.`
+  }
 
   if (!bot.instructions) return prompt
 

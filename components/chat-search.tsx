@@ -4,7 +4,7 @@ import * as React from "react"
 import { SearchIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { ChatAvatar } from "@/components/chat-avatar"
+import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/command"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 
-type ChatSearchItem = { id: string; name: string; avatar: string }
+type ChatSearchItem = { id: string; name: string; avatars: string[] }
 
 function ChatSearch({ chats }: { chats: ChatSearchItem[] }) {
   const router = useRouter()
@@ -81,7 +81,7 @@ function ChatSearch({ chats }: { chats: ChatSearchItem[] }) {
                     router.push(`/chats/${chat.id}`)
                   }}
                 >
-                  <ChatAvatar seed={chat.avatar} className="size-6" />
+                  <GroupChatAvatar seeds={chat.avatars} className="size-6" />
                   {chat.name}
                 </CommandItem>
               ))}
