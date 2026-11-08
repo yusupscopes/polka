@@ -54,6 +54,7 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input"
+import { Badge } from "@/components/ui/badge"
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block"
 import {
   Trace,
@@ -136,7 +137,8 @@ function ChatView({
 
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
-    sendMessage({ text: message.text })
+    // Remember who the message was for, so group chats can label it.
+    sendMessage({ text: message.text, metadata: { botId } })
     setInput("")
   }
 
@@ -151,6 +153,17 @@ function ChatView({
               const bot =
                 bots.length > 1 && message.role === "assistant"
                   ? bots.find((bot) => bot.id === segment.botId)
+                  : undefined
+              // And which bot each of the person's messages was sent to. The
+              // reply's bot stands in when the message didn't record one.
+              const recipient =
+                bots.length > 1 && message.role === "user"
+                  ? bots.find(
+                      (bot) =>
+                        bot.id ===
+                        (message.metadata?.botId ??
+                          messages[index + 1]?.metadata?.botId)
+                    )
                   : undefined
               const blocks = groupParts(segment.parts)
               // The reply, or the part after a handoff, starts before anything
@@ -173,6 +186,15 @@ function ChatView({
                     {blocks.map((block, i) => {
                       switch (block.type) {
                         case "text":
+                          // The recipient leads the first line, like a tag.
+                          if (recipient && i === 0) {
+                            return (
+                              <div key={i}>
+                                <RecipientBadge bot={recipient} />
+                                <MessageResponse>{block.text}</MessageResponse>
+                              </div>
+                            )
+                          }
                           return (
                             <MessageResponse key={i}>
                               {block.text}
@@ -292,6 +314,16 @@ function PendingReply({ bot }: { bot?: Bot }) {
       <ChatAvatar seed={bot.avatar} />
       {message}
     </div>
+  )
+}
+
+// Floats so the message's first line runs on beside it.
+function RecipientBadge({ bot }: { bot: Bot }) {
+  return (
+    <Badge variant="outline" className="float-left mr-1.5 max-w-32 pl-1">
+      <ChatAvatar seed={bot.avatar} className="size-3.5" />
+      <span className="min-w-0 truncate">{bot.name}</span>
+    </Badge>
   )
 }
 
