@@ -79,7 +79,11 @@ type Screenshot = Extract<
 export function Chat({ id, bots }: { id: string; bots: Bot[] }) {
   // The bot that answers the next message. The transport sends it with every
   // turn and picks up changes without being rebuilt.
-  const [botId, setBotId] = useState(bots[0].id)
+  const [pickedBotId, setBotId] = useState(bots[0].id)
+  // The picked bot may have been removed from the group since.
+  const botId = bots.some((bot) => bot.id === pickedBotId)
+    ? pickedBotId
+    : bots[0].id
   const transport = useTriggerChatTransport<typeof chatAgent>({
     task: "chat",
     accessToken: ({ chatId }) => mintChatAccessToken(chatId),

@@ -8,18 +8,21 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { getBots } from "@/queries/bots"
 import { getChat } from "@/queries/chats"
 
 export default async function Page({ params }: PageProps<"/chats/[chatId]">) {
   const { chatId } = await params
-  const chat = await getChat(chatId)
+  const [chat, allBots] = await Promise.all([getChat(chatId), getBots()])
 
   const bots = chat?.members.map((member) => member.bot) ?? []
   if (!chat || bots.length === 0) notFound()
 
   // A direct chat is named after its only bot.
   const name = chat.name ?? bots[0].name
-  const header = <ChatHeader name={name} kind={chat.kind} bots={bots} />
+  const header = (
+    <ChatHeader chat={chat} name={name} bots={bots} allBots={allBots} />
+  )
 
   // Group chats have no desktop, since each bot has its own.
   if (chat.kind === "group") {

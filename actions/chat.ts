@@ -7,7 +7,7 @@ import {
   defaultStorage,
   type ChatStartSessionParams,
 } from "@trigger.dev/sdk/ai"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, notInArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 import { db } from "@/lib/db"
@@ -84,5 +84,88 @@ export async function createGroupChat(
   })
 
   revalidatePath("/")
+  return { chat }
+}
+
+type UpdateGroupChatResult = { chat: Chat } | { error: string }
+
+export async function updateGroupChat(
+  chatId: string,
+  input: InsertGroupChat
+): Promise<UpdateGroupChatResult> {
+  const { userId } = await clerkAuth.protect()
+
+  const parsed = insertGroupChatSchema.safeParse(input)
+  if (!parsed.success) return { error: "Check the form and try again." }
+
+  const { name, botIds } = parsed.data
+
+  // The ids come from the browser, so only add bots the user owns.
+  const owned = await db
+    .select({ id: bots.id })
+    .from(bots)
+    .where(and(inArray(bots.id, botIds), eq(bots.userId, userId)))
+  if (owned.length !== new Set(botIds).size) {
+    return { error: "Some of those bots no longer exist." }
+  }
+
+  const chat = await db.transaction(async (tx) => {
+    const [chat] = await tx
+      .update(chats)
+      .set({ name })
+      .where(
+        and(
+          eq(chats.id, chatId),
+          eq(chats.userId, userId),
+          eq(chats.kind, "group")
+        )
+      )
+      .returning()
+    if (!chat) return undefined
+
+    // Bots that stay keep their join time, so the member order holds.
+    await tx.delete(chatMembers).where(
+      and(
+        eq(chatMembers.chatId, chatId),
+        notInArray(
+          chatMembers.botId,
+          owned.map((bot) => bot.id)
+        )
+      )
+    )
+    await tx
+      .insert(chatMembers)
+      .values(owned.map((bot) => ({ chatId, botId: bot.id })))
+      .onConflictDoNothing()
+    return chat
+  })
+  if (!chat) return { error: "That group chat no longer exists." }
+
+  // The name and faces show in the sidebar and on the chat page.
+  revalidatePath("/", "layout")
+  return { chat }
+}
+
+type DeleteGroupChatResult = { chat: Chat } | { error: string }
+
+export async function deleteGroupChat(
+  chatId: string
+): Promise<DeleteGroupChatResult> {
+  const { userId } = await clerkAuth.protect()
+
+  // Direct chats go only with their bot, so only group chats are deleted here.
+  const [chat] = await db
+    .delete(chats)
+    .where(
+      and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId),
+        eq(chats.kind, "group")
+      )
+    )
+    .returning()
+  if (!chat) return { error: "That group chat no longer exists." }
+
+  revalidatePath("/", "layout")
   return { chat }
 }
