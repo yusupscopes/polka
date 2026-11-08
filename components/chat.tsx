@@ -12,6 +12,7 @@ import {
   FilePenIcon,
   FileTextIcon,
   FolderOpenIcon,
+  ForwardIcon,
   KeyboardIcon,
   MonitorIcon,
   MouseIcon,
@@ -39,6 +40,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
+import { Shimmer } from "@/components/ai-elements/shimmer"
 import {
   PromptInput,
   PromptInputFooter,
@@ -124,6 +126,12 @@ function ChatView({
     id,
     messages: initialMessages,
     transport,
+    // After a handoff, keep talking to the bot that took over.
+    onFinish: ({ message }) => {
+      const segments = splitByBot(message)
+      const last = segments.at(-1)?.botId
+      if (segments.length > 1 && last) onBotChange(last)
+    },
   })
 
   function handleSubmit(message: PromptInputMessage) {
@@ -136,30 +144,73 @@ function ChatView({
     <div className="flex min-h-0 flex-1 flex-col">
       <Conversation>
         <ConversationContent className="mx-auto w-full max-w-3xl">
-          {messages.map((message) => (
-            <Message from={message.role} key={message.id}>
-              <MessageContent>
-                {groupParts(message.parts).map((block, i) => {
-                  switch (block.type) {
-                    case "text":
-                      return (
-                        <MessageResponse key={i}>{block.text}</MessageResponse>
-                      )
-                    case "screenshot":
-                      return <ScreenshotImage key={i} part={block.part} />
-                    case "trace":
-                      return (
-                        <Trace key={i}>
-                          {block.parts.map((part) => (
-                            <ToolRow key={part.toolCallId} part={part} />
-                          ))}
-                        </Trace>
-                      )
-                  }
-                })}
-              </MessageContent>
-            </Message>
-          ))}
+          {messages.flatMap((message, index) =>
+            splitByBot(message).map((segment, i, segments) => {
+              const key = `${message.id}-${i}`
+              // Group chats show which bot wrote each reply.
+              const bot =
+                bots.length > 1 && message.role === "assistant"
+                  ? bots.find((bot) => bot.id === segment.botId)
+                  : undefined
+              const blocks = groupParts(segment.parts)
+              // The reply, or the part after a handoff, starts before anything
+              // visible streams in.
+              const waiting =
+                status === "streaming" &&
+                index === messages.length - 1 &&
+                i === segments.length - 1 &&
+                blocks.length === 0
+              // A handoff that the next bot never got to answer, as after Stop.
+              if (i > 0 && blocks.length === 0 && !waiting) return null
+              const content = (
+                <Message
+                  from={message.role}
+                  key={key}
+                  className={bot && "min-w-0"}
+                >
+                  <MessageContent>
+                    {waiting && <Shimmer>Thinking...</Shimmer>}
+                    {blocks.map((block, i) => {
+                      switch (block.type) {
+                        case "text":
+                          return (
+                            <MessageResponse key={i}>
+                              {block.text}
+                            </MessageResponse>
+                          )
+                        case "screenshot":
+                          return <ScreenshotImage key={i} part={block.part} />
+                        case "trace":
+                          return (
+                            <Trace key={i}>
+                              {block.parts.map((part) => (
+                                <ToolRow key={part.toolCallId} part={part} />
+                              ))}
+                            </Trace>
+                          )
+                      }
+                    })}
+                  </MessageContent>
+                </Message>
+              )
+              if (!bot) return content
+              return (
+                <div key={key} className="flex items-start gap-3">
+                  <ChatAvatar seed={bot.avatar} />
+                  {content}
+                </div>
+              )
+            })
+          )}
+          {status === "submitted" && (
+            <PendingReply
+              bot={
+                bots.length > 1
+                  ? bots.find((bot) => bot.id === botId)
+                  : undefined
+              }
+            />
+          )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -226,6 +277,24 @@ function ChatView({
   )
 }
 
+// Stands in for the reply until its first chunk arrives.
+function PendingReply({ bot }: { bot?: Bot }) {
+  const message = (
+    <Message from="assistant" className={bot && "min-w-0"}>
+      <MessageContent>
+        <Shimmer>Thinking...</Shimmer>
+      </MessageContent>
+    </Message>
+  )
+  if (!bot) return message
+  return (
+    <div className="flex items-start gap-3">
+      <ChatAvatar seed={bot.avatar} />
+      {message}
+    </div>
+  )
+}
+
 function BotOption({ bot }: { bot: Bot }) {
   return (
     <>
@@ -233,6 +302,21 @@ function BotOption({ bot }: { bot: Bot }) {
       <span className="truncate">{bot.name}</span>
     </>
   )
+}
+
+// A reply is one bot's until it hands off; the parts after a handoff belong to
+// the bot it handed to.
+function splitByBot(message: ChatUIMessage) {
+  const segments: { botId?: string; parts: Part[] }[] = [
+    { botId: message.metadata?.botId, parts: [] },
+  ]
+  for (const part of message.parts) {
+    segments[segments.length - 1].parts.push(part)
+    if (part.type === "tool-handoff" && part.state === "output-available") {
+      segments.push({ botId: part.output.botId, parts: [] })
+    }
+  }
+  return segments
 }
 
 type Block =
@@ -472,6 +556,15 @@ function describe(part: ToolPart): Row {
           "Failed to take a screenshot",
         ],
       }
+    case "tool-handoff": {
+      const name =
+        part.state === "output-available" ? part.output.name : "another bot"
+      return {
+        icon: <ForwardIcon />,
+        title: ["Handing off", `Handed off to ${name}`, "Couldn't hand off"],
+        description: part.input?.reason,
+      }
+    }
   }
 }
 

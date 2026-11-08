@@ -3,9 +3,21 @@ import { tool, type ToolSet } from "ai"
 import { z } from "zod"
 
 import { daytona } from "@/lib/daytona"
+import type { Bot, Chat } from "@/lib/db/schema"
 
-// The bot's sandbox, set in `onBoot` so every tool call reaches the same one.
+// The answering bot's sandbox, set at the start of every turn so every tool
+// call reaches the same one. A handoff points it at the new bot's sandbox.
 export const sandboxLocal = chat.local<{ id: string }>({ id: "sandbox" })
+
+// The chat, its bots and the one answering, set at the start of every turn.
+// `handoff` changes `botId` mid-turn, and the agent's `prepareStep` switches
+// the prompt for the steps that follow.
+export const crewLocal = chat.local<{
+  chat: Chat
+  bots: Bot[]
+  botId: string
+  handoff?: { fromBotId: string; reason: string }
+}>({ id: "crew" })
 
 // Long output is cut so one command can't flood the model's context.
 const MAX_OUTPUT = 20_000
@@ -255,5 +267,40 @@ export const tools = {
     inputSchema: z.object({}),
     execute: screenshot,
     toModelOutput: screenshotToModel,
+  }),
+
+  // Only offered in group chats. The other bot answers in the same reply.
+  handoff: tool({
+    description:
+      "Hand the person's latest message to another bot in this group chat whose job fits it better than yours. That bot takes over right away, in the same reply, and sees the whole conversation. Call it on its own, before doing any of the work, and don't write a reply yourself: the person sees the handoff and your reason in the chat. Each message can be handed off once.",
+    inputSchema: z.object({
+      botId: z
+        .string()
+        .describe("The id of the bot to hand off to, from the chat's members."),
+      reason: z
+        .string()
+        .describe(
+          'One short sentence, addressed to the person, on why that bot fits better. For example: "Maya handles travel bookings."'
+        ),
+    }),
+    execute: async ({ botId, reason }) => {
+      if (crewLocal.chat.kind !== "group") {
+        throw new Error("Handoffs only work in group chats.")
+      }
+      if (crewLocal.handoff) {
+        throw new Error(
+          "This message was already handed off. Answer it yourself."
+        )
+      }
+      const to = crewLocal.bots.find((bot) => bot.id === botId)
+      if (!to) throw new Error(`No bot with id ${botId} is in this chat.`)
+      if (to.id === crewLocal.botId) {
+        throw new Error("You can't hand off to yourself.")
+      }
+      crewLocal.handoff = { fromBotId: crewLocal.botId, reason }
+      crewLocal.botId = to.id
+      sandboxLocal.id = to.sandboxId
+      return { botId: to.id, name: to.name }
+    },
   }),
 } satisfies ToolSet
