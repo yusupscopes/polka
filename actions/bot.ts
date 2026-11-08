@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { revalidatePath } from "next/cache"
 
-import { daytona } from "@/lib/daytona"
+import { daytona, MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import {
   bots,
@@ -36,6 +36,15 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
     sandbox = await daytona.create({ labels: { userId, botId } })
   } catch (err) {
     console.error("Failed to create sandbox", err)
+    return { error: "Couldn't set up your bot. Try again." }
+  }
+
+  // The bot's memory starts out empty.
+  try {
+    await sandbox.fs.uploadFile(Buffer.from(""), MEMORY_PATH)
+  } catch (err) {
+    console.error("Failed to create memory file", err)
+    await deleteSandbox(sandbox.id)
     return { error: "Couldn't set up your bot. Try again." }
   }
 

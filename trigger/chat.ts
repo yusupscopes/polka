@@ -9,6 +9,7 @@ import {
 import { asc, eq } from "drizzle-orm"
 import { z } from "zod"
 
+import { MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import { chatMembers, chats, type Bot, type Chat } from "@/lib/db/schema"
 import { crewLocal, sandboxLocal, tools } from "@/trigger/tools"
@@ -105,7 +106,9 @@ You have your own sandbox: a private, isolated Linux computer in the cloud that 
 
 Use your tools to do the work rather than describing how the person could do it. Prefer bash and the file tools when a task doesn't need the screen; they're faster and more reliable. When you do use the desktop, look at the screen with viewScreen before acting and after anything that changes it, and read coordinates from the latest screenshot. The person only sees a screenshot when you call showScreen, so use it when they ask what's on the screen.
 
-Keep replies short and conversational, like a chat message. Use Markdown only when it helps, such as for code or lists. If you don't know something, say so rather than guessing.`
+Keep replies short and conversational, like a chat message. Use Markdown only when it helps, such as for code or lists. If you don't know something, say so rather than guessing.
+
+${memoryPrompt(group)}`
 
   if (group) prompt += `\n\n${groupPrompt(bot, chat, members, handoff)}`
 
@@ -116,6 +119,18 @@ Keep replies short and conversational, like a chat message. Use Markdown only wh
 The person who created you gave these instructions for how to do your job:
 
 ${bot.instructions}`
+}
+
+// Each chat only sees its own messages. The memory file is how a bot carries
+// what it learned in its direct chat into group chats, and back.
+function memoryPrompt(group: boolean) {
+  return `## Your memory
+
+You only see the messages of the chat you're in. You also have your own direct chat with the person, and you may be in group chats with them, but you can't see those conversations from here. Your memory file, ${MEMORY_PATH}, is how you remember things across all of them. It's a Markdown file that starts out empty, and only you can read or change it.
+
+Read it with readFile when the answer might depend on something from another conversation: when the person refers to something they told you before, asks what you remember or know about them, or asks about earlier work${group ? ". This is a group chat, so the person's direct chat with you isn't here; check your memory before saying you don't know something they may have told you there" : ""}. Read it before saying you don't know or don't remember something about the person.
+
+Update it whenever you learn something worth remembering next time, in any chat: facts the person shares about themselves, their preferences, decisions, ongoing tasks and their state, and where you saved important files. Also update it when the person asks you to remember something, and remove things when they ask you to forget them or they stop being true. Read the file first, then write it back whole with writeFile, keeping it short and organized under headings, one fact per line. Don't save small talk, secrets such as passwords or keys, or things you can easily find again. Do it quietly alongside your reply; mention it only when the person asked you to remember something.`
 }
 
 function groupPrompt(
