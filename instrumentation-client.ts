@@ -10,7 +10,11 @@ Sentry.init({
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1.0,
 
-  integrations: [Sentry.replayIntegration()],
+  // Sentry.logger calls always reach Sentry Logs. Console errors go there too.
+  integrations: [
+    Sentry.replayIntegration(),
+    Sentry.consoleLoggingIntegration({ levels: ["error"] }),
+  ],
 })
 
 // Trace App Router navigations.

@@ -1,6 +1,9 @@
 import "server-only"
 
 import { createClerkClient } from "@clerk/backend"
+// Not @sentry/nextjs: the Trigger.dev worker imports this file too. Both
+// SDKs share one client, so logs reach whichever one is initialized.
+import { logger } from "@sentry/node"
 import type { LanguageModelUsage } from "ai"
 import { formatDistanceToNowStrict } from "date-fns"
 import { and, eq, gte, sql } from "drizzle-orm"
@@ -225,6 +228,14 @@ export async function chargeSandbox({
       costNanos: seconds * SANDBOX_PRICE_NANOS_PER_SECOND,
       botId,
       chatId,
+    })
+    logger.info("Sandbox charged", {
+      userId,
+      botId,
+      ...(chatId && { chatId }),
+      seconds,
+      // A charge with nothing billed ahead means the sandbox was stopped.
+      newRun: billedUntil <= now,
     })
   })
 }

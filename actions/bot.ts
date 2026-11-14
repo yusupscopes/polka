@@ -1,6 +1,7 @@
 "use server"
 
 import { auth } from "@clerk/nextjs/server"
+import * as Sentry from "@sentry/nextjs"
 import type { Sandbox } from "@daytona/sdk"
 import { and, eq, inArray } from "drizzle-orm"
 import { nanoid } from "nanoid"
@@ -45,10 +46,14 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
   // A new sandbox starts running, so it needs sandbox time left.
   const usage = await getUsageStatus(userId)
   if (!usage) return upgradeError("Upgrade to Pro to create bots.")
-  if (!usage.sandboxLeft) return usageError(sandboxLimitMessage(usage.period))
+  if (!usage.sandboxLeft) {
+    Sentry.logger.warn("Bot refused: sandbox allowance used up", { userId })
+    return usageError(sandboxLimitMessage(usage.period))
+  }
 
   const { instructions, ...rest } = parsed.data
   const botId = nanoid()
+  const startedAt = Date.now()
 
   // Every bot gets its own sandbox. Create it first so the bot row can point
   // at it.
@@ -61,7 +66,11 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
       autoStopInterval: SANDBOX_AUTO_STOP_MINUTES,
     })
   } catch (err) {
-    console.error("Failed to create sandbox", err)
+    Sentry.logger.error("Failed to create sandbox", {
+      userId,
+      botId,
+      error: String(err),
+    })
     return { error: "Couldn't set up your bot. Try again." }
   }
 
@@ -69,7 +78,12 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
   try {
     await sandbox.fs.uploadFile(Buffer.from(""), MEMORY_PATH)
   } catch (err) {
-    console.error("Failed to create memory file", err)
+    Sentry.logger.error("Failed to create memory file", {
+      userId,
+      botId,
+      sandboxId: sandbox.id,
+      error: String(err),
+    })
     await deleteSandbox(sandbox.id)
     return { error: "Couldn't set up your bot. Try again." }
   }
@@ -94,9 +108,22 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
 
     // The new sandbox is running until it auto-stops.
     await chargeSandbox({ userId, botId: bot.id, chatId: chat.id }).catch(
-      (err) => console.error(`Failed to charge sandbox ${sandbox.id}`, err)
+      (err) =>
+        Sentry.logger.error("Failed to charge sandbox", {
+          userId,
+          botId: bot.id,
+          sandboxId: sandbox.id,
+          error: String(err),
+        })
     )
 
+    Sentry.logger.info("Bot created", {
+      userId,
+      botId: bot.id,
+      chatId: chat.id,
+      sandboxId: sandbox.id,
+      durationMs: Date.now() - startedAt,
+    })
     revalidatePath("/")
     return { bot, chat }
   } catch (err) {
@@ -125,6 +152,7 @@ export async function updateBot(
     .returning()
   if (!bot) return { error: "That bot no longer exists." }
 
+  Sentry.logger.info("Bot updated", { userId, botId })
   // The name and face show in the sidebar and on every chat page.
   revalidatePath("/", "layout")
   return { bot }
@@ -164,6 +192,11 @@ export async function deleteBot(botId: string): Promise<DeleteBotResult> {
 
   await deleteSandbox(bot.sandboxId)
 
+  Sentry.logger.info("Bot deleted", {
+    userId,
+    botId,
+    sandboxId: bot.sandboxId,
+  })
   revalidatePath("/", "layout")
   return { bot }
 }
@@ -174,6 +207,9 @@ async function deleteSandbox(sandboxId: string) {
   try {
     await daytona.delete(await daytona.get(sandboxId))
   } catch (err) {
-    console.error(`Failed to delete sandbox ${sandboxId}`, err)
+    Sentry.logger.error("Failed to delete sandbox", {
+      sandboxId,
+      error: String(err),
+    })
   }
 }

@@ -1,6 +1,7 @@
 "use server"
 
 import { auth as clerkAuth } from "@clerk/nextjs/server"
+import * as Sentry from "@sentry/nextjs"
 import { auth } from "@trigger.dev/sdk"
 import {
   chat,
@@ -62,7 +63,10 @@ export async function checkChatUsage(): Promise<CheckChatUsageResult> {
 
   const usage = await getUsageStatus(userId)
   if (!usage) return upgradeError("Upgrade to Pro to chat with bots.")
-  if (!usage.aiLeft) return usageError(aiLimitMessage(usage.period))
+  if (!usage.aiLeft) {
+    Sentry.logger.warn("Message refused: AI allowance used up", { userId })
+    return usageError(aiLimitMessage(usage.period))
+  }
   return { ok: true }
 }
 
@@ -120,6 +124,11 @@ export async function createGroupChat(
     return chat
   })
 
+  Sentry.logger.info("Group chat created", {
+    userId,
+    chatId: chat.id,
+    botCount: owned.length,
+  })
   revalidatePath("/")
   return { chat }
 }
@@ -178,6 +187,11 @@ export async function updateGroupChat(
   })
   if (!chat) return { error: "That group chat no longer exists." }
 
+  Sentry.logger.info("Group chat updated", {
+    userId,
+    chatId,
+    botCount: owned.length,
+  })
   // The name and faces show in the sidebar and on the chat page.
   revalidatePath("/", "layout")
   return { chat }
@@ -203,6 +217,7 @@ export async function deleteGroupChat(
     .returning()
   if (!chat) return { error: "That group chat no longer exists." }
 
+  Sentry.logger.info("Group chat deleted", { userId, chatId })
   revalidatePath("/", "layout")
   return { chat }
 }

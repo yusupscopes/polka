@@ -1,6 +1,7 @@
 "use server"
 
 import { auth } from "@clerk/nextjs/server"
+import * as Sentry from "@sentry/nextjs"
 
 import {
   SANDBOXES,
@@ -41,7 +42,14 @@ async function prepareDesktop(
 
   const usage = await getUsageStatus(userId)
   if (!usage) return upgradeError("Upgrade to Pro to see your bot's screen.")
-  if (!usage.sandboxLeft) return usageError(sandboxLimitMessage(usage.period))
+  if (!usage.sandboxLeft) {
+    Sentry.logger.warn("Desktop refused: sandbox allowance used up", {
+      userId,
+      botId: bot.id,
+      chatId,
+    })
+    return usageError(sandboxLimitMessage(usage.period))
+  }
 
   await chargeSandbox({ userId, botId: bot.id, chatId })
   return { bot }
@@ -59,7 +67,9 @@ export async function getDesktopUrl(
   const { bot } = result
 
   try {
+    const startedAt = Date.now()
     const sandbox = await daytona.get(bot.sandboxId)
+    const sandboxState = sandbox.state ?? "unknown"
     if (sandbox.state !== "started") await sandbox.start()
     const { status } = await sandbox.computerUse.getStatus()
     if (status !== "active") await sandbox.computerUse.start()
@@ -74,9 +84,23 @@ export async function getDesktopUrl(
       reconnect: "true",
       resize: "scale",
     }).toString()
+
+    Sentry.logger.info("Desktop opened", {
+      botId: bot.id,
+      chatId,
+      sandboxId: bot.sandboxId,
+      sandboxState,
+      desktopStatus: status,
+      durationMs: Date.now() - startedAt,
+    })
     return { url: viewer.toString() }
   } catch (err) {
-    console.error(`Failed to open the desktop of sandbox ${bot.sandboxId}`, err)
+    Sentry.logger.error("Failed to open the desktop", {
+      botId: bot.id,
+      chatId,
+      sandboxId: bot.sandboxId,
+      error: String(err),
+    })
     return { error: "Couldn't reach the desktop. Try again." }
   }
 }

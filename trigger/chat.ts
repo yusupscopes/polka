@@ -1,4 +1,5 @@
 import { openai } from "@ai-sdk/openai"
+import * as Sentry from "@sentry/node"
 import { chat, defaultStorage } from "@trigger.dev/sdk/ai"
 import {
   isStepCount,
@@ -67,6 +68,14 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
     // The app checks before sending too. This stops a client that doesn't,
     // and a plan that ended mid-chat. The message reaches the chat as is.
     const usage = await getUsageStatus(row.userId)
+    if (!usage || !usage.aiLeft) {
+      Sentry.logger.warn("Chat turn refused", {
+        userId: row.userId,
+        botId: bot.id,
+        chatId,
+        reason: usage ? "ai_allowance" : "no_plan",
+      })
+    }
     if (!usage) throw new Error("Upgrade to Pro to chat with bots.")
     if (!usage.aiLeft) throw new Error(aiLimitMessage(usage.period))
     usageLocal.init({
@@ -104,7 +113,18 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
       },
       // Every step goes in the ledger as it finishes, so a stopped or failed
       // turn still counts what it used.
-      onStepFinish: async ({ usage }) => {
+      onStepFinish: async ({ usage, content }) => {
+        // The model sees a failed tool call and carries on, so nothing else
+        // reports it.
+        for (const part of content) {
+          if (part.type !== "tool-error") continue
+          Sentry.logger.warn("Tool call failed", {
+            chatId,
+            botId: crewLocal.botId,
+            tool: part.toolName,
+            error: String(part.error),
+          })
+        }
         await recordAiUsage({
           userId: usageLocal.userId,
           botId: crewLocal.botId,
@@ -124,6 +144,27 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
       ],
       abortSignal: signal,
     }),
+  // One wide event per turn: who answered, what it cost, and how it ended.
+  onTurnComplete: ({ chatId, turn, stopped, totalUsage, runId }) => {
+    Sentry.logger.info("Chat turn completed", {
+      userId: usageLocal.userId,
+      chatId,
+      chatKind: crewLocal.chat.kind,
+      botId: crewLocal.botId,
+      handoff: Boolean(crewLocal.handoff),
+      turn,
+      stopped,
+      inputTokens: totalUsage.inputTokens ?? 0,
+      outputTokens: totalUsage.outputTokens ?? 0,
+      costNanos: aiCostNanos(totalUsage),
+      runId,
+    })
+  },
+  // The run suspends between turns and may be checkpointed, so send buffered
+  // logs first.
+  onChatSuspend: async () => {
+    await Sentry.flush(2000)
+  },
 })
 
 function systemPrompt(
