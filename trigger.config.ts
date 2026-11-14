@@ -1,3 +1,5 @@
+import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
+import { esbuildPlugin } from "@trigger.dev/build/extensions";
 import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
@@ -23,5 +25,17 @@ export default defineConfig({
     // Lets tasks import `server-only` modules such as `lib/db`. No other
     // dependency ships a react-server export.
     conditions: ["react-server"],
+    extensions: [
+      // Uploads source maps on deploy so task stack traces in Sentry are readable.
+      esbuildPlugin(
+        sentryEsbuildPlugin({
+          org: "personal-projects-sp",
+          project: "polka",
+          authToken: process.env.SENTRY_AUTH_TOKEN,
+          telemetry: false,
+        }),
+        { placement: "last", target: "deploy" }
+      ),
+    ],
   },
 });
