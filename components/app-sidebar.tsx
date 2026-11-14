@@ -1,10 +1,10 @@
-import { UserButton } from "@clerk/nextjs"
 import { formatDistanceToNowStrict } from "date-fns"
 
 import { ChatMenuButton } from "@/components/chat-menu-button"
 import { ChatSearch } from "@/components/chat-search"
 import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { NewChatMenu } from "@/components/new-chat-menu"
+import { UserMenu } from "@/components/user-menu"
 import {
   Sidebar,
   SidebarContent,
@@ -84,27 +84,13 @@ export async function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            {/* UserButton renders its own <button>, so the menu button is a div and the trigger fills it. */}
+            {/* The user menu renders its own <button>, so the menu button is a div and the trigger fills it. */}
             <SidebarMenuButton
               render={<div />}
               size="lg"
               className="p-0 group-data-[collapsible=icon]:size-12!"
             >
-              <UserButton
-                showName
-                appearance={{
-                  elements: {
-                    rootBox: "size-full",
-                    userButtonTrigger:
-                      "size-full rounded-md p-2 focus:shadow-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                    userButtonBox:
-                      "w-full min-w-0 flex-row-reverse justify-end gap-4",
-                    userButtonAvatarBox: "size-8 rounded-lg",
-                    userButtonOuterIdentifier:
-                      "truncate ps-0 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:hidden",
-                  },
-                }}
-              />
+              <UserMenu />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -4,6 +4,12 @@ import { z } from "zod"
 
 import { daytona } from "@/lib/daytona"
 import type { Bot, Chat } from "@/lib/db/schema"
+import {
+  chargeSandbox,
+  getUsage,
+  sandboxLimitMessage,
+  type UsagePeriod,
+} from "@/lib/usage"
 
 // The answering bot's sandbox, set at the start of every turn so every tool
 // call reaches the same one. A handoff points it at the new bot's sandbox.
@@ -19,6 +25,14 @@ export const crewLocal = chat.local<{
   handoff?: { fromBotId: string; reason: string }
 }>({ id: "crew" })
 
+// Who the chat belongs to, their subscription period, and their AI spend when
+// the turn started, set at the start of every turn.
+export const usageLocal = chat.local<{
+  userId: string
+  period: UsagePeriod
+  aiNanos: number
+}>({ id: "usage" })
+
 // Long output is cut so one command can't flood the model's context.
 const MAX_OUTPUT = 20_000
 
@@ -26,9 +40,26 @@ const MAX_OUTPUT = 20_000
 // long enough for Daytona to auto-stop the sandbox, and a cached handle would
 // go stale without saying so.
 async function getSandbox() {
+  await chargeForSandbox()
   const sandbox = await daytona.get(sandboxLocal.id)
   if (sandbox.state !== "started") await sandbox.start()
   return sandbox
+}
+
+// Every use keeps the sandbox running, so it's charged to the period's
+// allowance first. Out of time, the tool fails and the model says why.
+async function chargeForSandbox() {
+  const { userId, period } = usageLocal
+  const { sandboxSeconds } = await getUsage(userId, period.start)
+  if (sandboxSeconds >= period.allowance.sandboxSeconds) {
+    throw new Error(sandboxLimitMessage(period))
+  }
+  // A handoff moves `botId` along with the sandbox.
+  await chargeSandbox({
+    userId,
+    botId: crewLocal.botId,
+    chatId: crewLocal.chat.id,
+  })
 }
 
 // The desktop doesn't run until it's started, and it stops with the sandbox.

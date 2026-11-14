@@ -2,8 +2,16 @@
 
 import { auth } from "@clerk/nextjs/server"
 
-import { SANDBOXES, upgradeError, type UpgradeError } from "@/lib/billing"
+import {
+  SANDBOXES,
+  upgradeError,
+  usageError,
+  type UpgradeError,
+  type UsageError,
+} from "@/lib/billing"
 import { daytona } from "@/lib/daytona"
+import type { Bot } from "@/lib/db/schema"
+import { chargeSandbox, getUsageStatus, sandboxLimitMessage } from "@/lib/usage"
 import { getChat } from "@/queries/chats"
 
 // Daytona serves noVNC for the sandbox desktop on this port.
@@ -13,14 +21,14 @@ const NOVNC_PORT = 6080
 // viewer only needs it to load and to reconnect.
 const URL_TTL_SECONDS = 60 * 60
 
-type GetDesktopUrlResult = { url: string } | { error: string } | UpgradeError
+type DesktopError = { error: string } | UpgradeError | UsageError
 
-// A signed noVNC link to the desktop of the chat's bot, starting the sandbox
-// and its desktop if they've stopped.
-export async function getDesktopUrl(
+// The bot whose desktop the chat shows, once the sandbox is charged for the
+// time the viewer keeps it running.
+async function prepareDesktop(
   chatId: string
-): Promise<GetDesktopUrlResult> {
-  const { has } = await auth.protect()
+): Promise<{ bot: Bot } | DesktopError> {
+  const { userId, has } = await auth.protect()
   if (!has({ feature: SANDBOXES })) {
     return upgradeError("Upgrade to Pro to see your bot's screen.")
   }
@@ -30,6 +38,25 @@ export async function getDesktopUrl(
   if (!chat || !bot) return { error: "That chat no longer exists." }
   // Each bot in a group has its own desktop, so there's no one to show.
   if (chat.kind === "group") return { error: "Group chats have no desktop." }
+
+  const usage = await getUsageStatus(userId)
+  if (!usage) return upgradeError("Upgrade to Pro to see your bot's screen.")
+  if (!usage.sandboxLeft) return usageError(sandboxLimitMessage(usage.period))
+
+  await chargeSandbox({ userId, botId: bot.id, chatId })
+  return { bot }
+}
+
+type GetDesktopUrlResult = { url: string } | DesktopError
+
+// A signed noVNC link to the desktop of the chat's bot, starting the sandbox
+// and its desktop if they've stopped.
+export async function getDesktopUrl(
+  chatId: string
+): Promise<GetDesktopUrlResult> {
+  const result = await prepareDesktop(chatId)
+  if (!("bot" in result)) return result
+  const { bot } = result
 
   try {
     const sandbox = await daytona.get(bot.sandboxId)
@@ -52,4 +79,15 @@ export async function getDesktopUrl(
     console.error(`Failed to open the desktop of sandbox ${bot.sandboxId}`, err)
     return { error: "Couldn't reach the desktop. Try again." }
   }
+}
+
+type KeepDesktopResult = { ok: true } | DesktopError
+
+// Called every minute while the viewer is connected. Its traffic can keep the
+// sandbox from auto-stopping, so that time is charged too. Out of time, the
+// viewer disconnects.
+export async function keepDesktop(chatId: string): Promise<KeepDesktopResult> {
+  const result = await prepareDesktop(chatId)
+  if (!("bot" in result)) return result
+  return { ok: true }
 }

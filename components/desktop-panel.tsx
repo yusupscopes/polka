@@ -6,7 +6,7 @@ import { MonitorIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { createContext, use, useEffect, useRef, useState } from "react"
 import { usePanelRef, type PanelImperativeHandle } from "react-resizable-panels"
 
-import { getDesktopUrl } from "@/actions/desktop"
+import { getDesktopUrl, keepDesktop } from "@/actions/desktop"
 import { useErrorToast } from "@/components/error-toast"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog"
 import { ResizablePanel } from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
+
+const KEEP_DESKTOP_MS = 60 * 1000
 
 const DesktopPanelContext = createContext<{
   panelRef: React.RefObject<PanelImperativeHandle | null>
@@ -73,10 +75,25 @@ export function DesktopPanel({
   async function connect() {
     setConnecting(true)
     const result = await getDesktopUrl(chatId)
-    if ("upgrade" in result) showError(result)
+    if ("upgrade" in result || "usage" in result) showError(result)
     setDesktop(result)
     setConnecting(false)
   }
+
+  const url = desktop && "url" in desktop ? desktop.url : null
+
+  // A connected viewer can keep the sandbox running, so check in every minute
+  // to charge for it. Out of sandbox time, the viewer disconnects.
+  useEffect(() => {
+    if (!url) return
+    const timer = setInterval(async () => {
+      const result = await keepDesktop(chatId).catch(() => null)
+      if (!result || !("error" in result)) return
+      showError(result)
+      setDesktop(result)
+    }, KEEP_DESKTOP_MS)
+    return () => clearInterval(timer)
+  }, [url, chatId, showError])
 
   // There's one viewer for both the panel and the dialog. Moving an iframe in
   // the DOM reloads it and drops the VNC session, so it stays put and follows
@@ -108,8 +125,6 @@ export function DesktopPanel({
     follow()
     return () => cancelAnimationFrame(request)
   }, [desktop, fullscreen, collapsed])
-
-  const url = desktop && "url" in desktop ? desktop.url : null
 
   return (
     <ResizablePanel

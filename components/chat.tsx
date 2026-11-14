@@ -1,7 +1,6 @@
 "use client"
 
 import { useChat } from "@ai-sdk/react"
-import { useAuth } from "@clerk/nextjs"
 import type { TriggerChatTransport } from "@trigger.dev/sdk/chat"
 import {
   useLoadTranscript,
@@ -25,6 +24,7 @@ import {
 import { useState } from "react"
 
 import {
+  checkChatUsage,
   loadTranscript,
   mintChatAccessToken,
   startChatSession,
@@ -68,7 +68,6 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace"
-import { BOTS, SANDBOXES } from "@/lib/billing"
 import type { Bot } from "@/lib/db/schema"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
@@ -130,7 +129,7 @@ function ChatView({
   onBotChange: (botId: string) => void
 }) {
   const [input, setInput] = useState("")
-  const { has } = useAuth()
+  const [checking, setChecking] = useState(false)
   const showError = useErrorToast()
   const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>({
     id,
@@ -142,13 +141,20 @@ function ChatView({
       const last = segments.at(-1)?.botId
       if (segments.length > 1 && last) onBotChange(last)
     },
+    // Such as the agent refusing a turn once the allowance is used up.
+    onError: (error) => showError({ error: error.message }),
   })
 
-  function handleSubmit(message: PromptInputMessage) {
-    if (!message.text.trim()) return
-    // The server refuses too, but this keeps the message and explains why.
-    if (!has?.({ feature: BOTS }) || !has?.({ feature: SANDBOXES })) {
-      showError({ error: "Upgrade to Pro to chat with bots.", upgrade: true })
+  async function handleSubmit(message: PromptInputMessage) {
+    if (!message.text.trim() || checking) return
+    // The agent refuses too, but this keeps the message and explains why.
+    setChecking(true)
+    const usage = await checkChatUsage().catch(() => ({
+      error: "Couldn't send your message. Try again.",
+    }))
+    setChecking(false)
+    if ("error" in usage) {
+      showError(usage)
       return
     }
     // Remember who the message was for, so group chats can label it.

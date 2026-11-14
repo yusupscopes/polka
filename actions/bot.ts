@@ -6,7 +6,15 @@ import { and, eq, inArray } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { revalidatePath } from "next/cache"
 
-import { BOTS, SANDBOXES, upgradeError, type UpgradeError } from "@/lib/billing"
+import {
+  BOTS,
+  SANDBOX_AUTO_STOP_MINUTES,
+  SANDBOXES,
+  upgradeError,
+  usageError,
+  type UpgradeError,
+  type UsageError,
+} from "@/lib/billing"
 import { daytona, MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import {
@@ -18,11 +26,10 @@ import {
   type Chat,
   type InsertBot,
 } from "@/lib/db/schema"
+import { chargeSandbox, getUsageStatus, sandboxLimitMessage } from "@/lib/usage"
 
 type CreateBotResult =
-  | { bot: Bot; chat: Chat }
-  | { error: string }
-  | UpgradeError
+  { bot: Bot; chat: Chat } | { error: string } | UpgradeError | UsageError
 
 export async function createBot(input: InsertBot): Promise<CreateBotResult> {
   const { userId, has } = await auth.protect()
@@ -35,6 +42,11 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
   const parsed = insertBotSchema.safeParse(input)
   if (!parsed.success) return { error: "Check the form and try again." }
 
+  // A new sandbox starts running, so it needs sandbox time left.
+  const usage = await getUsageStatus(userId)
+  if (!usage) return upgradeError("Upgrade to Pro to create bots.")
+  if (!usage.sandboxLeft) return usageError(sandboxLimitMessage(usage.period))
+
   const { instructions, ...rest } = parsed.data
   const botId = nanoid()
 
@@ -42,7 +54,12 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
   // at it.
   let sandbox: Sandbox
   try {
-    sandbox = await daytona.create({ labels: { userId, botId } })
+    // Set rather than left to Daytona's default, since sandbox time is
+    // charged up to the auto-stop.
+    sandbox = await daytona.create({
+      labels: { userId, botId },
+      autoStopInterval: SANDBOX_AUTO_STOP_MINUTES,
+    })
   } catch (err) {
     console.error("Failed to create sandbox", err)
     return { error: "Couldn't set up your bot. Try again." }
@@ -74,6 +91,11 @@ export async function createBot(input: InsertBot): Promise<CreateBotResult> {
       await tx.insert(chatMembers).values({ chatId: chat.id, botId: bot.id })
       return { bot, chat }
     })
+
+    // The new sandbox is running until it auto-stops.
+    await chargeSandbox({ userId, botId: bot.id, chatId: chat.id }).catch(
+      (err) => console.error(`Failed to charge sandbox ${sandbox.id}`, err)
+    )
 
     revalidatePath("/")
     return { bot, chat }

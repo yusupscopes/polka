@@ -9,10 +9,17 @@ import {
 import { asc, eq } from "drizzle-orm"
 import { z } from "zod"
 
+import { MODEL } from "@/lib/billing"
 import { MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import { chatMembers, chats, type Bot, type Chat } from "@/lib/db/schema"
-import { crewLocal, sandboxLocal, tools } from "@/trigger/tools"
+import {
+  aiCostNanos,
+  aiLimitMessage,
+  getUsageStatus,
+  recordAiUsage,
+} from "@/lib/usage"
+import { crewLocal, sandboxLocal, tools, usageLocal } from "@/trigger/tools"
 
 // Replies carry the bot that wrote them, so group chats can show who said what.
 // After a handoff, the rest of the reply is the new bot's.
@@ -57,6 +64,17 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
       : bots[0]
     if (!row || !bot) throw new Error(`Chat ${chatId} has no such bot.`)
 
+    // The app checks before sending too. This stops a client that doesn't,
+    // and a plan that ended mid-chat. The message reaches the chat as is.
+    const usage = await getUsageStatus(row.userId)
+    if (!usage) throw new Error("Upgrade to Pro to chat with bots.")
+    if (!usage.aiLeft) throw new Error(aiLimitMessage(usage.period))
+    usageLocal.init({
+      userId: row.userId,
+      period: usage.period,
+      aiNanos: usage.used.aiNanos,
+    })
+
     crewLocal.init({ chat: row, bots, botId: bot.id })
     sandboxLocal.init({ id: bot.sandboxId })
     chat.prompt.set(systemPrompt(bot, row, bots))
@@ -65,9 +83,9 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
         part.type === "start" ? { botId: bot.id } : undefined,
     })
   },
-  run: async ({ messages, tools, signal, streamText }) =>
+  run: async ({ chatId, messages, tools, signal, streamText }) =>
     streamText({
-      model: openai("gpt-6-luna"),
+      model: openai(MODEL),
       messages,
       tools,
       // Only group chats have another bot to hand off to.
@@ -84,8 +102,26 @@ export const chatAgent = chat.withUIMessage<ChatUIMessage>().agent({
           activeTools: withoutHandoff,
         }
       },
-      // Computer use takes many small steps: look, click, look again.
-      stopWhen: isStepCount(50),
+      // Every step goes in the ledger as it finishes, so a stopped or failed
+      // turn still counts what it used.
+      onStepFinish: async ({ usage }) => {
+        await recordAiUsage({
+          userId: usageLocal.userId,
+          botId: crewLocal.botId,
+          chatId,
+          usage,
+        })
+      },
+      stopWhen: [
+        // Computer use takes many small steps: look, click, look again.
+        isStepCount(50),
+        // Running out of allowance ends the turn after the current step.
+        ({ steps }) =>
+          steps.reduce(
+            (spent, step) => spent + aiCostNanos(step.usage),
+            usageLocal.aiNanos
+          ) >= usageLocal.period.allowance.aiNanos,
+      ],
       abortSignal: signal,
     }),
 })

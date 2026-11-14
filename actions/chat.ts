@@ -10,7 +10,14 @@ import {
 import { and, eq, inArray, notInArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
-import { BOTS, SANDBOXES } from "@/lib/billing"
+import {
+  BOTS,
+  SANDBOXES,
+  upgradeError,
+  usageError,
+  type UpgradeError,
+  type UsageError,
+} from "@/lib/billing"
 import { db } from "@/lib/db"
 import {
   bots,
@@ -20,6 +27,7 @@ import {
   type Chat,
   type InsertGroupChat,
 } from "@/lib/db/schema"
+import { aiLimitMessage, getUsageStatus } from "@/lib/usage"
 import { getChat } from "@/queries/chats"
 import type { chatAgent } from "@/trigger/chat"
 
@@ -40,6 +48,22 @@ async function assertCanChat() {
   if (!has({ feature: BOTS }) || !has({ feature: SANDBOXES })) {
     throw new Error("Upgrade to Pro to chat with bots.")
   }
+}
+
+type CheckChatUsageResult = { ok: true } | UpgradeError | UsageError
+
+// Checked before each message, so a refused one stays in the input with a
+// reason. The agent checks again before answering.
+export async function checkChatUsage(): Promise<CheckChatUsageResult> {
+  const { userId, has } = await clerkAuth.protect()
+  if (!has({ feature: BOTS }) || !has({ feature: SANDBOXES })) {
+    return upgradeError("Upgrade to Pro to chat with bots.")
+  }
+
+  const usage = await getUsageStatus(userId)
+  if (!usage) return upgradeError("Upgrade to Pro to chat with bots.")
+  if (!usage.aiLeft) return usageError(aiLimitMessage(usage.period))
+  return { ok: true }
 }
 
 export async function startChatSession(

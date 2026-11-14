@@ -2,7 +2,9 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 import { relations } from "drizzle-orm"
 import {
+  bigint,
   index,
+  integer,
   pgEnum,
   pgTable,
   primaryKey,
@@ -32,6 +34,11 @@ export const bots = pgTable(
     instructions: text(),
     // Daytona sandbox ID, created with the bot and deleted with it
     sandboxId: text("sandbox_id").notNull(),
+    // Sandbox time is charged ahead, up to when Daytona would auto-stop the
+    // sandbox. Null until it first runs. See `chargeSandbox` in lib/usage.ts.
+    sandboxBilledUntil: timestamp("sandbox_billed_until", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -110,6 +117,39 @@ export const chatMembers = pgTable(
 
 export type ChatMember = typeof chatMembers.$inferSelect
 export type NewChatMember = typeof chatMembers.$inferInsert
+
+// What a usage event measures: model tokens, or seconds a sandbox runs.
+export const usageMeter = pgEnum("usage_meter", ["ai", "sandbox"])
+
+// The usage ledger. Rows are only ever added, and a subscription period's
+// usage is the sum of its rows. Bots and chats aren't foreign keys, so
+// deleting them doesn't wipe the usage they ran up.
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    // Clerk user ID of the owner
+    userId: text("user_id").notNull(),
+    meter: usageMeter().notNull(),
+    // Tokens for `ai`, seconds for `sandbox`
+    quantity: integer().notNull(),
+    // What it cost us, in billionths of a dollar
+    costNanos: bigint("cost_nanos", { mode: "number" }).notNull(),
+    botId: text("bot_id"),
+    chatId: text("chat_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("usage_events_user_id_created_at_idx").on(t.userId, t.createdAt),
+  ]
+)
+
+export type UsageEvent = typeof usageEvents.$inferSelect
+export type NewUsageEvent = typeof usageEvents.$inferInsert
 
 export const botsRelations = relations(bots, ({ many }) => ({
   memberships: many(chatMembers),
