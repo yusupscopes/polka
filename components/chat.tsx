@@ -1,6 +1,7 @@
 "use client"
 
 import { useChat } from "@ai-sdk/react"
+import { useAuth } from "@clerk/nextjs"
 import type { TriggerChatTransport } from "@trigger.dev/sdk/chat"
 import {
   useLoadTranscript,
@@ -30,6 +31,7 @@ import {
 } from "@/actions/chat"
 
 import { ChatAvatar } from "@/components/chat-avatar"
+import { useErrorToast } from "@/components/error-toast"
 import {
   Conversation,
   ConversationContent,
@@ -66,6 +68,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace"
+import { BOTS, SANDBOXES } from "@/lib/billing"
 import type { Bot } from "@/lib/db/schema"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
@@ -127,6 +130,8 @@ function ChatView({
   onBotChange: (botId: string) => void
 }) {
   const [input, setInput] = useState("")
+  const { has } = useAuth()
+  const showError = useErrorToast()
   const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>({
     id,
     messages: initialMessages,
@@ -141,6 +146,11 @@ function ChatView({
 
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
+    // The server refuses too, but this keeps the message and explains why.
+    if (!has?.({ feature: BOTS }) || !has?.({ feature: SANDBOXES })) {
+      showError({ error: "Upgrade to Pro to chat with bots.", upgrade: true })
+      return
+    }
     // Remember who the message was for, so group chats can label it.
     sendMessage({ text: message.text, metadata: { botId } })
     setInput("")

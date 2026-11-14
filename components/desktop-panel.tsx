@@ -7,6 +7,7 @@ import { createContext, use, useEffect, useRef, useState } from "react"
 import { usePanelRef, type PanelImperativeHandle } from "react-resizable-panels"
 
 import { getDesktopUrl } from "@/actions/desktop"
+import { useErrorToast } from "@/components/error-toast"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -67,10 +68,13 @@ export function DesktopPanel({
   const frameRef = useRef<HTMLIFrameElement>(null)
   const panelSlotRef = useRef<HTMLDivElement>(null)
   const dialogSlotRef = useRef<HTMLDivElement>(null)
+  const showError = useErrorToast()
 
   async function connect() {
     setConnecting(true)
-    setDesktop(await getDesktopUrl(chatId))
+    const result = await getDesktopUrl(chatId)
+    if ("upgrade" in result) showError(result)
+    setDesktop(result)
     setConnecting(false)
   }
 

@@ -2,6 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server"
 
+import { SANDBOXES, upgradeError, type UpgradeError } from "@/lib/billing"
 import { daytona } from "@/lib/daytona"
 import { getChat } from "@/queries/chats"
 
@@ -12,14 +13,17 @@ const NOVNC_PORT = 6080
 // viewer only needs it to load and to reconnect.
 const URL_TTL_SECONDS = 60 * 60
 
-type GetDesktopUrlResult = { url: string } | { error: string }
+type GetDesktopUrlResult = { url: string } | { error: string } | UpgradeError
 
 // A signed noVNC link to the desktop of the chat's bot, starting the sandbox
 // and its desktop if they've stopped.
 export async function getDesktopUrl(
   chatId: string
 ): Promise<GetDesktopUrlResult> {
-  await auth.protect()
+  const { has } = await auth.protect()
+  if (!has({ feature: SANDBOXES })) {
+    return upgradeError("Upgrade to Pro to see your bot's screen.")
+  }
 
   const chat = await getChat(chatId)
   const bot = chat?.members[0]?.bot

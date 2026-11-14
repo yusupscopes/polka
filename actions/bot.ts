@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { revalidatePath } from "next/cache"
 
+import { BOTS, SANDBOXES, upgradeError, type UpgradeError } from "@/lib/billing"
 import { daytona, MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import {
@@ -18,10 +19,18 @@ import {
   type InsertBot,
 } from "@/lib/db/schema"
 
-type CreateBotResult = { bot: Bot; chat: Chat } | { error: string }
+type CreateBotResult =
+  | { bot: Bot; chat: Chat }
+  | { error: string }
+  | UpgradeError
 
 export async function createBot(input: InsertBot): Promise<CreateBotResult> {
-  const { userId } = await auth.protect()
+  const { userId, has } = await auth.protect()
+
+  // A bot comes with a sandbox, so creating one needs both.
+  if (!has({ feature: BOTS }) || !has({ feature: SANDBOXES })) {
+    return upgradeError("Upgrade to Pro to create bots.")
+  }
 
   const parsed = insertBotSchema.safeParse(input)
   if (!parsed.success) return { error: "Check the form and try again." }

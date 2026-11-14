@@ -43,6 +43,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { useErrorToast } from "@/components/error-toast"
 import { toast } from "@/components/ui/toast"
 import { insertBotSchema, type Bot, type InsertBot } from "@/lib/db/schema"
 
@@ -98,6 +99,7 @@ function BotDialog({
     defaultValues: bot ? botValues(bot) : emptyBot(),
   })
   const avatar = useWatch({ control: form.control, name: "avatar" })
+  const showError = useErrorToast()
 
   // Editing always starts from the saved bot, dropping any cancelled changes.
   function handleOpenChange(next: boolean) {
@@ -110,7 +112,7 @@ function BotDialog({
       ? await updateBot(bot.id, values)
       : await createBot(values)
     if ("error" in result) {
-      toast.add({ title: result.error, type: "error" })
+      showError(result)
       return
     }
     toast.add({

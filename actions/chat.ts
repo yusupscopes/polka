@@ -10,6 +10,7 @@ import {
 import { and, eq, inArray, notInArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
+import { BOTS, SANDBOXES } from "@/lib/billing"
 import { db } from "@/lib/db"
 import {
   bots,
@@ -31,14 +32,26 @@ async function assertChatOwner(chatId: string) {
   if (!owned) throw new Error("Chat not found.")
 }
 
+// Talking to a bot runs it, and its tools run in its sandbox. The chat checks
+// this before sending, so this only stops a client that skips the check. The
+// access token lasts an hour, which bounds use after a plan ends.
+async function assertCanChat() {
+  const { has } = await clerkAuth.protect()
+  if (!has({ feature: BOTS }) || !has({ feature: SANDBOXES })) {
+    throw new Error("Upgrade to Pro to chat with bots.")
+  }
+}
+
 export async function startChatSession(
   params: ChatStartSessionParams<typeof chatAgent>
 ) {
+  await assertCanChat()
   await assertChatOwner(params.chatId)
   return start(params)
 }
 
 export async function mintChatAccessToken(chatId: string) {
+  await assertCanChat()
   await assertChatOwner(chatId)
   return auth.createPublicToken({
     scopes: { read: { sessions: chatId }, write: { sessions: chatId } },
