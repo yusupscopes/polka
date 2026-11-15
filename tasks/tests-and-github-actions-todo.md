@@ -24,7 +24,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## T3: Make `npm run lint` exit 0 (S)
 
-- [ ] T3
+- [x] T3
   - Acceptance: `.agents/**` ignored; `react-hooks/*` rules are warnings in `components/ui/**`, `components/ai-elements/**` and `hooks/use-mobile.ts` only; `trigger/example.ts` uses `unknown`; `npm run lint` exits 0, and an `any` or a React Compiler violation added under `app/` still errors.
   - Verify: `npm run lint; echo $?` → 0. Spot check: a temporary `any` in an app file errors (then reverted)
   - Files: `eslint.config.mjs`, `trigger/example.ts`
