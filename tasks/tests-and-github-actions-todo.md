@@ -32,7 +32,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## T4: Make `npm run typecheck` work on a fresh clone (XS)
 
-- [ ] T4
+- [x] T4
   - Acceptance: `typecheck` is `next typegen && tsc --noEmit`; passes in a fresh clone with no `.next/`.
   - Verify: fresh clone in the scratchpad → `npm ci` → `npm run typecheck`
   - Files: `package.json`
