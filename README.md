@@ -16,7 +16,7 @@ Every bot in Polka gets its own cloud sandbox: a private Linux machine with a sh
 [![Postgres on Neon](https://img.shields.io/badge/Postgres-Neon-00E599?logo=postgresql&logoColor=white)](https://neon.com)
 [![Sentry](https://img.shields.io/badge/Sentry-monitoring-362D59?logo=sentry&logoColor=white)](https://sentry.io)
 
-[Features](#features) · [How it works](#how-it-works) · [Billing and usage](#billing-and-usage) · [Observability](#observability) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Project structure](#project-structure)
+[Demo](#demo) · [Features](#features) · [How it works](#how-it-works) · [Billing and usage](#billing-and-usage) · [Observability](#observability) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Project structure](#project-structure)
 
 </div>
 
@@ -25,6 +25,17 @@ Every bot in Polka gets its own cloud sandbox: a private Linux machine with a sh
 </p>
 
 ---
+
+## Demo
+
+<!--
+  TODO: add the demo video. Drag an .mp4 (under 10 MB) into GitHub's README
+  editor and paste the user-attachments URL it gives you on its own line here,
+  or commit a GIF as docs/demo.gif and use:
+  <p align="center"><img src="docs/demo.gif" alt="..." width="900"></p>
+-->
+
+The video walks through creating a bot, watching it work on its desktop, a group chat where one bot hands a task to another, and the `/usage` page.
 
 ## Features
 
