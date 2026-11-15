@@ -12,7 +12,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## T2: Move `aiCostNanos` to `lib/billing.ts` and test pricing (M)
 
-- [ ] T2
+- [x] T2
   - Acceptance: `aiCostNanos` is exported from `lib/billing.ts` and no longer from `lib/usage.ts`; `lib/usage.ts` and `trigger/chat.ts` import it from billing; `lib/billing.test.ts` covers uncached, cached and output pricing, missing counts, and the sandbox price per second.
   - Verify: test written first (RED: import fails), then `npm test` and `npm run typecheck` green; `grep -rn aiCostNanos` shows no import from `@/lib/usage`
   - Files: `lib/billing.ts`, `lib/billing.test.ts`, `lib/usage.ts`, `trigger/chat.ts`
@@ -20,7 +20,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## Checkpoint A
 
-- [ ] `npm test` and `npm run typecheck` green
+- [x] `npm test` and `npm run typecheck` green
 
 ## T3: Make `npm run lint` exit 0 (S)
 
