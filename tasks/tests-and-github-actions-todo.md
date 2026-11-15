@@ -4,7 +4,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## T1: Add Vitest and schema tests (M)
 
-- [ ] T1
+- [x] T1
   - Acceptance: `vitest@^4` is a devDependency; `npm test` runs `vitest run`; `vitest.config.ts` uses the Node environment and the `@/` alias; `lib/db/schema.test.ts` covers every `insertBotSchema` and `insertGroupChatSchema` case in the spec's Tests table, and they pass.
   - Verify: `npm test`, `npm run typecheck`
   - Files: `package.json`, `package-lock.json`, `vitest.config.ts`, `lib/db/schema.test.ts`
