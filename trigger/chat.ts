@@ -10,16 +10,11 @@ import {
 import { asc, eq } from "drizzle-orm"
 import { z } from "zod"
 
-import { MODEL } from "@/lib/billing"
+import { aiCostNanos, MODEL } from "@/lib/billing"
 import { MEMORY_PATH } from "@/lib/daytona"
 import { db } from "@/lib/db"
 import { chatMembers, chats, type Bot, type Chat } from "@/lib/db/schema"
-import {
-  aiCostNanos,
-  aiLimitMessage,
-  getUsageStatus,
-  recordAiUsage,
-} from "@/lib/usage"
+import { aiLimitMessage, getUsageStatus, recordAiUsage } from "@/lib/usage"
 import { crewLocal, sandboxLocal, tools, usageLocal } from "@/trigger/tools"
 
 // Replies carry the bot that wrote them, so group chats can show who said what.

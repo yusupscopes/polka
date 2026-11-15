@@ -1,3 +1,5 @@
+import type { LanguageModelUsage } from "ai"
+
 // Clerk Billing features. The Pro plan has both and the free plan has neither,
 // so they're checked with `has({ feature })` rather than by plan.
 export const BOTS = "bots"
@@ -36,6 +38,19 @@ export const MODEL_PRICE = {
   inputNanos: 100, // $0.10 per 1M
   cachedInputNanos: 10, // $0.01 per 1M
   outputNanos: 500, // $0.50 per 1M
+}
+
+// What a model call cost, in billionths of a dollar. OpenAI doesn't charge
+// extra for cache writes, so those count as plain input.
+export function aiCostNanos(usage: LanguageModelUsage) {
+  const input = usage.inputTokens ?? 0
+  const cached = usage.inputTokenDetails.cacheReadTokens ?? 0
+  const output = usage.outputTokens ?? 0
+  return (
+    (input - cached) * MODEL_PRICE.inputNanos +
+    cached * MODEL_PRICE.cachedInputNanos +
+    output * MODEL_PRICE.outputNanos
+  )
 }
 
 // Daytona's prices for a running sandbox of the default size (1 vCPU, 1 GiB),

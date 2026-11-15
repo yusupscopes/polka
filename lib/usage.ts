@@ -9,8 +9,8 @@ import { formatDistanceToNowStrict } from "date-fns"
 import { and, eq, gte, sql } from "drizzle-orm"
 
 import {
+  aiCostNanos,
   BOTS,
-  MODEL_PRICE,
   MONTHLY_ALLOWANCE,
   SANDBOX_AUTO_STOP_MINUTES,
   SANDBOX_PRICE_NANOS_PER_SECOND,
@@ -143,19 +143,6 @@ export function aiLimitMessage(period: UsagePeriod) {
 
 export function sandboxLimitMessage(period: UsagePeriod) {
   return `You've used this period's sandbox time. It resets in ${formatDistanceToNowStrict(period.end)}.`
-}
-
-// What a model call cost, in billionths of a dollar. OpenAI doesn't charge
-// extra for cache writes, so those count as plain input.
-export function aiCostNanos(usage: LanguageModelUsage) {
-  const input = usage.inputTokens ?? 0
-  const cached = usage.inputTokenDetails.cacheReadTokens ?? 0
-  const output = usage.outputTokens ?? 0
-  return (
-    (input - cached) * MODEL_PRICE.inputNanos +
-    cached * MODEL_PRICE.cachedInputNanos +
-    output * MODEL_PRICE.outputNanos
-  )
 }
 
 export async function recordAiUsage({
