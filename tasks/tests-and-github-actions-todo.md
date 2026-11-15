@@ -40,11 +40,11 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## Checkpoint B
 
-- [ ] In a fresh clone: `npm ci`, `npm run lint`, `npm run typecheck` and `npm test` all exit 0
+- [x] In a fresh clone: `npm ci`, `npm run lint`, `npm run typecheck` and `npm test` all exit 0
 
 ## T5: Add the CI workflow (S)
 
-- [ ] T5
+- [x] T5
   - Acceptance: `.github/workflows/ci.yml` runs on push to `main` and on `pull_request`; uses concurrency that cancels in-progress PR runs; `permissions: contents: read`; one job on `ubuntu-latest`, Node 24 with npm cache, timeout of 15 minutes; steps `npm ci` → lint → typecheck → test; no secrets.
   - Verify: the YAML parses; every step's command passed at Checkpoint B
   - Files: `.github/workflows/ci.yml`
