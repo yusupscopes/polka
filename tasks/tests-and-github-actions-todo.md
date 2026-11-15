@@ -60,4 +60,4 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## Checkpoint C
 
-- [ ] All spec success criteria met locally; the workflow run itself is checked once a PR exists
+- [x] All spec success criteria met locally; the workflow run itself is checked once a PR exists
