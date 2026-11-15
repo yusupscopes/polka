@@ -52,7 +52,7 @@ Plan: `tasks/tests-and-github-actions-plan.md`
 
 ## T6: README: `npm test` and a CI badge (XS)
 
-- [ ] T6
+- [x] T6
   - Acceptance: the Scripts table lists `npm test`, `npm run typecheck` mentions typegen, and a CI badge points to the workflow.
   - Verify: read the rendered diff
   - Files: `README.md`

@@ -6,6 +6,7 @@
 
 Every bot in Polka gets its own cloud sandbox: a private Linux machine with a shell, a filesystem and a desktop it drives with the mouse and keyboard. Give a bot a job, then message it in a direct chat or put several bots in a group chat where they hand work to each other.
 
+[![CI](https://github.com/yusupscopes/polka/actions/workflows/ci.yml/badge.svg)](https://github.com/yusupscopes/polka/actions/workflows/ci.yml)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -188,10 +189,17 @@ Sign up, subscribe to Pro at `/pricing` (a Clerk test card works in development)
 | `npm run build` | Build for production |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Lint with ESLint |
-| `npm run typecheck` | Type-check with `tsc` |
+| `npm run typecheck` | Generate Next.js route types, then type-check with `tsc` |
+| `npm test` | Run the unit tests with Vitest |
 | `npm run format` | Format with Prettier |
 | `npm run db:push` | Push the Drizzle schema to the database |
 | `npm run db:studio` | Open Drizzle Studio |
+
+## Tests and CI
+
+Unit tests use [Vitest](https://vitest.dev) and sit next to the code they test, as `*.test.ts`. They cover the form schemas and the usage pricing, and need no database, network or secrets.
+
+[GitHub Actions](.github/workflows/ci.yml) runs `npm run lint`, `npm run typecheck` and `npm test` on every push to `main` and every pull request.
 
 ## Project structure
 
